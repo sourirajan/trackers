@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FT Tracker</title>
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f4f8;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1d4ed8;
+      color: #fff;
+      padding: 13px 20px;
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.2);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .app-title { font-size: 1.1rem; font-weight: 700; white-space: nowrap; }
+
+    .month-nav {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.15);
+      border-radius: 8px; padding: 4px 8px;
+    }
+    .month-nav button {
+      background: none; border: none; color: #fff;
+      font-size: 1.4rem; cursor: pointer;
+      width: 30px; height: 30px; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    .month-nav button:hover { background: rgba(255,255,255,.2); }
+    #monthDisplay { font-weight: 600; min-width: 140px; text-align: center; font-size: .95rem; }
+
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .total-badge {
+      background: rgba(255,255,255,.18);
+      border-radius: 20px; padding: 5px 14px;
+      font-size: .9rem; white-space: nowrap;
+    }
+    .total-badge strong { font-size: 1rem; }
+
+    #syncStatus { font-size: .78rem; min-width: 68px; text-align: right; opacity: .9; }
+    #syncStatus.saving { color: #fde68a; }
+    #syncStatus.saved  { color: #86efac; }
+    #syncStatus.error  { color: #fca5a5; }
+
+    .icon-btn {
+      background: none; border: none; color: #fff;
+      font-size: 1.3rem; cursor: pointer;
+      padding: 6px 8px; border-radius: 6px; line-height: 1;
+      transition: background .15s;
+    }
+    .icon-btn:hover { background: rgba(255,255,255,.2); }
+
+    /* ── Main ── */
+    main { max-width: 920px; margin: 20px auto; padding: 0 16px 40px; }
+
+    /* ── Calendar Card ── */
+    .calendar-card {
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 1px 8px rgba(0,0,0,.1);
+      overflow: hidden; position: relative;
+    }
+    .calendar-card.loading { pointer-events: none; }
+
+    /* ── Loading overlay ── */
+    .cal-loading-overlay {
+      display: none; position: absolute; inset: 0;
+      background: rgba(255,255,255,.82);
+      z-index: 20;
+      flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    }
+    .cal-loading-overlay.visible { display: flex; }
+    .spinner {
+      width: 38px; height: 38px;
+      border: 3px solid #dbeafe;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .cal-loading-msg { font-size: .85rem; font-weight: 600; color: #475569; }
+
+    /* ── Bulk toolbar ── */
+    .bulk-toolbar {
+      display: flex; align-items: center;
+      justify-content: space-between; flex-wrap: wrap; gap: 10px;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .bulk-toolbar-left { display: flex; align-items: center; gap: 8px; }
+    .bulk-toggle-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 13px; border: 1.5px solid #c7d2fe;
+      border-radius: 8px; background: #eff6ff; color: #3730a3;
+      font-size: .84rem; font-weight: 600; cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .bulk-toggle-btn:hover { background: #e0e7ff; }
+    .bulk-toggle-btn.active { background: #4338ca; color: #fff; border-color: #4338ca; }
+    .bulk-hint { font-size: .78rem; color: #64748b; }
+
+    .bulk-actions { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .bulk-actions.visible { display: flex; }
+    .bulk-count-badge {
+      background: #4338ca; color: #fff;
+      border-radius: 12px; padding: 2px 10px;
+      font-size: .78rem; font-weight: 700;
+    }
+    .bulk-act-btn {
+      padding: 7px 14px; border: none; border-radius: 8px;
+      font-size: .84rem; font-weight: 600; cursor: pointer;
+      transition: filter .15s;
+    }
+    .bulk-act-btn:hover { filter: brightness(.9); }
+    .bulk-no-ft      { background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0; }
+    .bulk-price      { background: #2563eb; color: #fff; }
+    .bulk-cancel-act { background: #fee2e2; color: #dc2626; }
+
+    /* ── Calendar grid ── */
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+
+    .cal-dow {
+      text-align: center; padding: 10px 4px;
+      font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .07em;
+      color: #64748b; background: #f8fafc;
+      border-bottom: 2px solid #cbd5e1;
+    }
+
+    .cal-cell {
+      min-height: 86px; border: 1px solid #94a3b8;
+      padding: 8px 6px; cursor: pointer;
+      transition: filter .13s, box-shadow .13s;
+      display: flex; flex-direction: column; align-items: center;
+      position: relative; user-select: none;
+    }
+    .cal-cell.empty { background: #f9fafb; cursor: default; pointer-events: none; border-color: #e2e8f0; }
+    .cal-cell:not(.empty):hover { filter: brightness(.95); z-index: 1; }
+
+    /* Three visual states */
+    .cal-cell.ft-default { background: #eff6ff; }
+    .cal-cell.ft-custom  { background: #fef3c7; }
+    .cal-cell.ft-none    { background: #f8fafc; }
+    .cal-cell.is-today   { box-shadow: inset 0 0 0 2.5px #2563eb; }
+
+    /* Selection */
+    .cal-cell.selected { box-shadow: inset 0 0 0 2.5px #4338ca !important; filter: brightness(.93); }
+    .cal-cell.selected .select-check { display: flex; }
+    .select-check {
+      display: none; position: absolute; top: 4px; right: 4px;
+      width: 17px; height: 17px; background: #4338ca; border-radius: 50%;
+      align-items: center; justify-content: center;
+      font-size: .6rem; color: #fff; font-weight: 700;
+    }
+
+    .day-num {
+      font-size: .92rem; font-weight: 700; color: #1e293b;
+      text-align: center; width: 100%; line-height: 1; padding-bottom: 4px;
+    }
+    .cal-cell.ft-none .day-num { color: #9ca3af; }
+
+    .day-price {
+      font-size: .72rem; font-weight: 600; text-align: center;
+      line-height: 1.3; margin-top: 4px;
+    }
+    .ft-default .day-price { color: #1d4ed8; }
+    .ft-custom  .day-price {
+      color: #92400e; background: #fde68a;
+      border-radius: 4px; padding: 1px 6px;
+    }
+    .no-ft-icon { font-size: 1.2rem; color: #d1d5db; margin-top: 4px; }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      padding: 10px 16px; background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      font-size: .78rem; color: #64748b;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+    .ld-default { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .ld-custom  { background: #fef3c7; border: 1px solid #fde68a; }
+    .ld-none    { background: #f8fafc; border: 1px solid #e2e8f0; }
+
+    /* ── Summary bar ── */
+    .summary-bar {
+      display: flex; gap: 14px; flex-wrap: wrap;
+      padding: 10px 16px; background: #fff;
+      border-top: 1px solid #f1f5f9;
+      font-size: .82rem; color: #475569;
+    }
+    .sum-item { display: flex; align-items: center; gap: 5px; }
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-weight: 700; font-size: .75rem; }
+    .b-blue  { background: #dbeafe; color: #1d4ed8; }
+    .b-amber { background: #fef3c7; color: #92400e; }
+    .b-gray  { background: #f1f5f9; color: #64748b; }
+    .b-green { background: #dcfce7; color: #166534; }
+
+    /* ── Overlay / Modal ── */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(15,23,42,.55); z-index: 500;
+      align-items: center; justify-content: center; padding: 16px;
+    }
+    .overlay.open { display: flex; }
+
+    .modal {
+      background: #fff; border-radius: 14px;
+      padding: 24px; width: 100%; max-width: 420px;
+      max-height: 92vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+    .modal-hdr {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-bottom: 16px;
+    }
+    .modal-title { font-size: 1rem; font-weight: 700; color: #1e40af; }
+    .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #94a3b8; line-height: 1; }
+    .close-btn:hover { color: #1e293b; }
+
+    .day-sub { font-size: .88rem; color: #64748b; margin-bottom: 18px; }
+    .form-row { margin-bottom: 14px; }
+    .form-label { display: block; font-size: .82rem; font-weight: 600; color: #475569; margin-bottom: 5px; }
+    .form-hint { font-size: .75rem; color: #94a3b8; margin-top: 4px; }
+
+    .toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+    .toggle input { display: none; }
+    .toggle-track {
+      width: 44px; height: 24px; background: #d1d5db;
+      border-radius: 12px; position: relative; transition: background .2s; flex-shrink: 0;
+    }
+    .toggle input:checked ~ .toggle-track { background: #2563eb; }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 18px; height: 18px; background: #fff;
+      border-radius: 50%; transition: transform .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle input:checked ~ .toggle-track .toggle-thumb { transform: translateX(20px); }
+    .toggle-text { font-size: .88rem; font-weight: 600; color: #374151; }
+
+    .form-input {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid #e2e8f0; border-radius: 8px; font-size: .9rem;
+    }
+    .form-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }
+    .form-input:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
+    .form-input.deviated { border-color: #f59e0b; background: #fffbeb; }
+    .form-input.err { border-color: #ef4444; }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 20px; }
+    .btn { flex: 1; padding: 10px 14px; border: none; border-radius: 8px; font-size: .88rem; font-weight: 600; cursor: pointer; transition: filter .15s; }
+    .btn:hover:not(:disabled) { filter: brightness(.92); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-ghost   { background: #f1f5f9; color: #475569; }
+    .btn-full    { width: 100%; }
+
+    /* ── Config modal ── */
+    .modal-wide { max-width: 560px; }
+    .cfg-note {
+      font-size: .8rem; color: #64748b; margin-bottom: 14px; line-height: 1.6;
+      background: #f8fafc; padding: 10px 12px; border-radius: 8px; border-left: 3px solid #bfdbfe;
+    }
+    .cfg-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    .cfg-table th {
+      background: #eff6ff; color: #1d4ed8; padding: 8px 10px;
+      font-size: .74rem; font-weight: 700; text-align: left;
+      text-transform: uppercase; letter-spacing: .05em;
+      border-bottom: 2px solid #dbeafe;
+    }
+    .cfg-table td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .cfg-table tr:last-child td { border-bottom: none; }
+
+    .cfg-day-in {
+      padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px;
+      font-size: .84rem; width: 130px;
+    }
+    .cfg-day-in:focus { outline: none; border-color: #2563eb; }
+    .cfg-price-in {
+      padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px;
+      font-size: .88rem; width: 90px;
+    }
+    .cfg-price-in:focus { outline: none; border-color: #2563eb; }
+
+    .btn-sm { padding: 5px 10px; border: none; border-radius: 6px; font-size: .8rem; font-weight: 600; cursor: pointer; }
+    .btn-sm:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-danger { background: #fee2e2; color: #dc2626; }
+    .btn-danger:hover:not(:disabled) { background: #fecaca; }
+    .btn-add { background: #eff6ff; color: #1d4ed8; margin-bottom: 14px; }
+    .btn-add:hover { background: #dbeafe; }
+
+    hr.divider { border: none; border-top: 1px solid #f1f5f9; margin: 18px 0; }
+
+    /* Keys section inside config modal */
+    .keys-grid { display: flex; flex-direction: column; gap: 10px; }
+    .key-row label { display: block; font-size: .78rem; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+    .key-input-row { display: flex; gap: 8px; }
+    .key-in { flex: 1; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: .86rem; }
+    .key-in:focus { outline: none; border-color: #2563eb; }
+    .key-save-btn {
+      padding: 8px 14px; background: #f1f5f9; color: #475569;
+      border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+      white-space: nowrap; font-size: .84rem;
+    }
+    .key-save-btn:hover { background: #e2e8f0; }
+    .key-hint { font-size: .72rem; color: #94a3b8; margin-top: 3px; }
+
+    /* ── Bulk price modal ── */
+    .bulk-modal { max-width: 360px; }
+    .bulk-modal-info { font-size: .84rem; color: #64748b; margin-bottom: 14px; line-height: 1.5; }
+
+    /* ── Setup modal ── */
+    .setup-modal { max-width: 420px; }
+    .setup-title { font-size: 1.05rem; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
+    .setup-msg { font-size: .84rem; color: #64748b; line-height: 1.6; margin-bottom: 18px; }
+    .setup-field { margin-bottom: 12px; }
+    .setup-field label { display: block; font-size: .82rem; font-weight: 600; color: #475569; margin-bottom: 4px; }
+    .setup-in {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid #e2e8f0; border-radius: 8px; font-size: .9rem;
+    }
+    .setup-in:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }
+    .setup-in.err { border-color: #ef4444; }
+    .setup-err-msg { font-size: .75rem; color: #ef4444; margin-top: 4px; display: none; }
+    .setup-err-msg.visible { display: block; }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      header { padding: 10px 12px; gap: 6px; }
+      .app-title { font-size: .9rem; }
+      #monthDisplay { min-width: 100px; font-size: .85rem; }
+      .total-badge { padding: 4px 10px; font-size: .8rem; }
+      #syncStatus { display: none; }
+      main { margin: 12px auto; padding: 0 8px 30px; }
+      .cal-cell { min-height: 64px; padding: 5px 4px; }
+      .day-num { font-size: .8rem; }
+      .day-price { font-size: .67rem; }
+      .cal-dow { font-size: .65rem; padding: 8px 2px; }
+      .cfg-day-in { width: 120px; font-size: .78rem; }
+      .bulk-toolbar { padding: 8px 10px; }
+      .bulk-toggle-btn { font-size: .78rem; padding: 6px 10px; }
+      .bulk-act-btn { font-size: .78rem; padding: 6px 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="app-title">FT Tracker</span>
+  <div class="month-nav">
+    <button onclick="changeMonth(-1)" aria-label="Previous month">&#8249;</button>
+    <span id="monthDisplay">Loading…</span>
+    <button onclick="changeMonth(1)" aria-label="Next month">&#8250;</button>
+  </div>
+  <div class="header-right">
+    <div class="total-badge">Total: <strong id="totalDisplay">—</strong></div>
+    <span id="syncStatus"></span>
+    <button class="icon-btn" onclick="openCfg()" title="Settings" aria-label="Settings">&#9881;</button>
+  </div>
+</header>
+
+<main>
+  <div class="calendar-card" id="calendarCard">
+
+    <!-- Loading overlay — shown during API calls -->
+    <div class="cal-loading-overlay" id="calLoadingOverlay">
+      <div class="spinner"></div>
+      <span class="cal-loading-msg" id="calLoadingMsg">Loading…</span>
+    </div>
+
+    <!-- Bulk update toolbar — inside the card, above the calendar -->
+    <div class="bulk-toolbar">
+      <div class="bulk-toolbar-left">
+        <button class="bulk-toggle-btn" id="bulkToggleBtn" onclick="toggleSelectMode()">
+          &#9744; Select Days
+        </button>
+        <span class="bulk-hint" id="bulkHint">Select multiple days to bulk update</span>
+      </div>
+      <div class="bulk-actions" id="bulkActions">
+        <span class="bulk-count-badge" id="bulkCount">0</span>
+        <button class="bulk-act-btn bulk-no-ft"  onclick="bulkApplyNoFt()">&#9135; No FT</button>
+        <button class="bulk-act-btn bulk-price"  onclick="openBulkPrice()">&#8377; Set Price</button>
+        <button class="bulk-act-btn bulk-cancel-act" onclick="cancelSelectMode()">&#215; Cancel</button>
+      </div>
+    </div>
+
+    <div class="cal-grid" id="calGrid">
+      <div style="grid-column:1/-1;padding:40px;text-align:center;color:#94a3b8">Loading…</div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot ld-default"></div> Default FT</div>
+      <div class="legend-item"><div class="legend-dot ld-custom"></div> Custom Price</div>
+      <div class="legend-item"><div class="legend-dot ld-none"></div> No FT</div>
+    </div>
+    <div class="summary-bar" id="summaryBar"></div>
+
+  </div><!-- /.calendar-card -->
+</main>
+
+
+<!-- ── Day Detail Modal ── -->
+<div class="overlay" id="dayModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title" id="dayModalTitle"></span>
+      <button class="close-btn" onclick="closeDayModal()" aria-label="Close">&#215;</button>
+    </div>
+    <p class="day-sub" id="dayModalSub"></p>
+
+    <div class="form-row">
+      <label class="toggle">
+        <input type="checkbox" id="ftToggle" onchange="onFtToggle()">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-text" id="toggleText">FT Requested</span>
+      </label>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="dayPrice">Price</label>
+      <input type="number" class="form-input" id="dayPrice" min="0" step="1" oninput="onPriceInput()">
+      <p class="form-hint" id="priceHint"></p>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="dayComment">
+        Comment <span style="font-weight:400;color:#94a3b8">(optional)</span>
+      </label>
+      <input type="text" class="form-input" id="dayComment" placeholder="e.g. Reason for price change">
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost"   onclick="closeDayModal()">Cancel</button>
+      <button class="btn btn-primary" id="dayModalSaveBtn" onclick="saveDayModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Bulk Set Price Modal ── -->
+<div class="overlay" id="bulkPriceModal">
+  <div class="modal bulk-modal">
+    <div class="modal-hdr">
+      <span class="modal-title">Set Price for Selected Days</span>
+      <button class="close-btn" onclick="closeBulkPrice()" aria-label="Close">&#215;</button>
+    </div>
+    <p class="bulk-modal-info" id="bulkPriceInfo"></p>
+
+    <div class="form-row">
+      <label class="form-label" for="bulkPriceIn">Price per day</label>
+      <input type="number" class="form-input" id="bulkPriceIn" min="0" step="1"
+             placeholder="Enter price" onkeydown="if(event.key==='Enter') applyBulkPrice()">
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="bulkCommentIn">
+        Comment <span style="font-weight:400;color:#94a3b8">(optional)</span>
+      </label>
+      <input type="text" class="form-input" id="bulkCommentIn" placeholder="Reason for this price">
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost"   onclick="closeBulkPrice()">Cancel</button>
+      <button class="btn btn-primary" onclick="applyBulkPrice()">Apply</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Settings / Price Config Modal ── -->
+<div class="overlay" id="cfgModal">
+  <div class="modal modal-wide">
+    <div class="modal-hdr">
+      <span class="modal-title">&#9881;&nbsp; Price Configuration</span>
+      <button class="close-btn" onclick="closeCfg()" aria-label="Close">&#215;</button>
+    </div>
+    <p class="cfg-note">
+      Set the daily FT price and the day of the month it takes effect.
+      The price applies until the next change or end of the month.
+      Add a new row whenever the price changes during the month.
+    </p>
+    <table class="cfg-table">
+      <thead>
+        <tr><th>Effective From (Day)</th><th>Daily Price (&#8377;)</th><th></th></tr>
+      </thead>
+      <tbody id="cfgBody"></tbody>
+    </table>
+    <button class="btn-sm btn-add" onclick="addCfgRow()">&#43; Add Price Change</button>
+
+    <hr class="divider">
+
+    <div class="keys-grid">
+      <div class="key-row">
+        <label for="cfgAccessKey">Access Key</label>
+        <div class="key-input-row">
+          <input type="password" class="key-in" id="cfgAccessKey" placeholder="Enter access key">
+        </div>
+      </div>
+      <div class="key-row">
+        <label for="cfgMasterKey">Master Key</label>
+        <div class="key-input-row">
+          <input type="password" class="key-in" id="cfgMasterKey" placeholder="Enter master key">
+        </div>
+      </div>
+      <div class="key-row">
+        <label for="cfgCollId">Collection ID</label>
+        <div class="key-input-row">
+          <input type="text" class="key-in" id="cfgCollId" placeholder="Enter collection ID">
+        </div>
+        <p class="key-hint">Stored securely on this device only.</p>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:20px">
+      <button class="btn btn-ghost" onclick="closeCfg()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCfgAll()">Save Configuration</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── First-time Setup Modal ── -->
+<div class="overlay open" id="setupModal">
+  <div class="modal setup-modal">
+    <p class="setup-title">Welcome to FT Tracker</p>
+    <p class="setup-msg">
+      To get started, please enter the following details. They will be saved on this
+      device for future use.
+    </p>
+    <div class="setup-field">
+      <label for="setupAccessKey">Access Key</label>
+      <input type="password" class="setup-in" id="setupAccessKey" placeholder="Enter your access key"
+             oninput="clearSetupErr('setupAccessKey')">
+      <p class="setup-err-msg" id="err-setupAccessKey">This field is required.</p>
+    </div>
+    <div class="setup-field">
+      <label for="setupMasterKey">Master Key</label>
+      <input type="password" class="setup-in" id="setupMasterKey" placeholder="Enter your master key"
+             oninput="clearSetupErr('setupMasterKey')">
+      <p class="setup-err-msg" id="err-setupMasterKey">This field is required.</p>
+    </div>
+    <div class="setup-field">
+      <label for="setupCollId">Collection ID</label>
+      <input type="text" class="setup-in" id="setupCollId" placeholder="Enter your collection ID"
+             oninput="clearSetupErr('setupCollId')"
+             onkeydown="if(event.key==='Enter') saveSetup()">
+      <p class="setup-err-msg" id="err-setupCollId">This field is required.</p>
+    </div>
+    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="saveSetup()">Continue</button>
+  </div>
+</div>
+
+
+<script>
+// ════════════════════════════════════════════════════════
+//  FT TRACKER  — Calendar view, per-month price config,
+//                jsonbin.io storage, bulk update
+// ════════════════════════════════════════════════════════
+
+const MN      = ['January','February','March','April','May','June',
+                 'July','August','September','October','November','December'];
+const DOW     = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MON_ABR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// ── App state ──────────────────────────────────────────
+const _now   = new Date();
+let curYear  = _now.getFullYear();
+let curMonth = _now.getMonth();
+
+let globalConfig = [];               // [{day: N, price: N}, …]
+let monthData    = { deviations: [] };
+let saveTimer    = null;
+let editDay      = null;
+
+// ── Selection state ────────────────────────────────────
+let selectMode   = false;
+let selectedDays = new Set();        // Set of day-of-month numbers
+
+// ── Bin map — in-memory cache (loaded once per page load) ──
+let binMapCache = null;              // { 'ft-YYYYMM': binId, … }
+
+// ── Local-storage helpers ──────────────────────────────
+const LS = {
+  getAccessKey: ()  => localStorage.getItem('ft_apikey')       || '',
+  setAccessKey: k   => localStorage.setItem('ft_apikey', k),
+  getMasterKey: ()  => localStorage.getItem('ft_masterkey')    || '',
+  setMasterKey: k   => localStorage.setItem('ft_masterkey', k),
+  getCollId:    ()  => localStorage.getItem('ft_collectionid') || '',
+  setCollId:    id  => localStorage.setItem('ft_collectionid', id),
+  getBinMap:    ()  => JSON.parse(localStorage.getItem('ft_binmap')  || '{}'),
+  saveBinMap:   m   => localStorage.setItem('ft_binmap', JSON.stringify(m)),
+  getCfg:       ()  => JSON.parse(localStorage.getItem('ft_config')  || '[]'),
+  saveCfg:      cfg => localStorage.setItem('ft_config', JSON.stringify(cfg))
+};
+
+function isSetupComplete() {
+  return !!(LS.getAccessKey() && LS.getMasterKey() && LS.getCollId());
+}
+
+// ── Date / formatting utilities ────────────────────────
+function toIso(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+function isoToday() { return toIso(_now.getFullYear(), _now.getMonth(), _now.getDate()); }
+function fmtIso(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}-${MON_ABR[parseInt(m,10)-1]}-${y}`;
+}
+function fmtDate(y, m, d) { return fmtIso(toIso(y, m, d)); }
+function fmtMoney(n)       { return '\u20B9' + Number(n).toLocaleString('en-IN'); }
+function daysIn(y, m)      { return new Date(y, m + 1, 0).getDate(); }
+function monthKey(y, m)    { return `ft-${y}${String(m + 1).padStart(2,'0')}`; }
+
+// ── Status & loading helpers ───────────────────────────
+function setStatus(text, cls) {
+  const el = document.getElementById('syncStatus');
+  el.textContent = text;
+  el.className   = cls || '';
+}
+
+function setCalLoading(on, msg) {
+  const overlay = document.getElementById('calLoadingOverlay');
+  const card    = document.getElementById('calendarCard');
+  if (on) {
+    document.getElementById('calLoadingMsg').textContent = msg || 'Loading…';
+    overlay.classList.add('visible');
+    card.classList.add('loading');
+  } else {
+    overlay.classList.remove('visible');
+    card.classList.remove('loading');
+  }
+}
+
+// ── Price logic (day-of-month) ─────────────────────────
+function defaultPriceFor(y, m, d) {
+  if (!globalConfig.length) return 0;
+  const sorted = [...globalConfig].sort((a, b) => a.day - b.day);
+  let price = sorted[0].price || 0;
+  for (const c of sorted) {
+    if (c.day <= d) price = c.price || 0;
+    else break;
+  }
+  return price;
+}
+
+// ── Deviation helpers ──────────────────────────────────
+function dayInfo(day) {
+  const dev = (monthData.deviations || []).find(d => d.day === day);
+  const def = defaultPriceFor(curYear, curMonth, day);
+  return {
+    ft:      dev?.ft      !== undefined ? dev.ft      : true,
+    price:   dev?.price   !== undefined ? dev.price   : def,
+    comment: dev?.comment || '',
+    defPrice: def
+  };
+}
+
+function setDeviation(day, field, value) {
+  if (!monthData.deviations) monthData.deviations = [];
+  let dev = monthData.deviations.find(d => d.day === day);
+  if (!dev) { dev = { day }; monthData.deviations.push(dev); }
+
+  if (field === 'ft')      dev.ft      = value;
+  if (field === 'price')   dev.price   = Number(value);
+  if (field === 'comment') dev.comment = value;
+
+  // Clean up defaults
+  const def = defaultPriceFor(curYear, curMonth, day);
+  if (dev.ft === true)    delete dev.ft;
+  if (dev.price === def)  delete dev.price;
+  if (!dev.comment)       delete dev.comment;
+
+  // Remove empty deviation record
+  if (Object.keys(dev).every(k => k === 'day'))
+    monthData.deviations = monthData.deviations.filter(d => d.day !== day);
+}
+
+// ── API constants ──────────────────────────────────────
+const BINS_BASE = 'https://api.jsonbin.io/v3/b';
+const COLL_BASE = 'https://api.jsonbin.io/v3/c';
+
+async function apiFetch(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-ACCESS-KEY' : LS.getAccessKey(),
+      ...(opts.headers || {})
+    }
+  });
+  if (res.status === 401) { setStatus('Auth error', 'error'); showSetupModal(); throw new Error('Auth'); }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// getBinMap — calls collection API once per page load; caches in memory
+// The collection API returns items with .name and .record (bin id) directly.
+async function getBinMap() {
+  if (binMapCache !== null) return binMapCache;
+
+  // Start with whatever is stored locally
+  const stored = LS.getBinMap();
+  binMapCache  = { ...stored };
+
+  try {
+    const r = await fetch(
+      `${COLL_BASE}/${LS.getCollId()}/bins?sortBy=createdAt&sortOrder=desc`,
+      { headers: { 'X-MASTER-KEY': LS.getMasterKey() } }
+    );
+    if (r.status === 401) { setStatus('Auth error', 'error'); showSetupModal(); throw new Error('Auth'); }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    const items = (await r.json()).result || [];
+    // Each item has .name (bin name) and .record (bin id) — no extra meta call needed
+    for (const item of items) {
+      if (item.record && item.name) binMapCache[item.name] = item.record;
+    }
+    LS.saveBinMap(binMapCache);
+  } catch (e) {
+    if (e.message === 'Auth') throw e;
+    // Fall back gracefully to the stored map on network errors
+  }
+  return binMapCache;
+}
+
+async function binLoad(binId)         { return (await apiFetch(`${BINS_BASE}/${binId}/latest`)).record; }
+async function binUpdate(binId, data) { return apiFetch(`${BINS_BASE}/${binId}`, { method: 'PUT', body: JSON.stringify(data) }); }
+async function binCreate(name, data)  {
+  const r = await fetch(BINS_BASE, {
+    method : 'POST',
+    headers: {
+      'Content-Type'    : 'application/json',
+      'X-ACCESS-KEY'    : LS.getAccessKey(),
+      'X-Bin-Name'      : name,
+      'X-Bin-Private'   : 'true',
+      'X-Collection-Id' : LS.getCollId()
+    },
+    body: JSON.stringify(data)
+  });
+  if (r.status === 401) { setStatus('Auth error', 'error'); showSetupModal(); throw new Error('Auth'); }
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const id = (await r.json()).metadata.id;
+  // Update in-memory and localStorage cache immediately
+  if (binMapCache) binMapCache[name] = id;
+  const stored = LS.getBinMap();
+  stored[name] = id;
+  LS.saveBinMap(stored);
+  return id;
+}
+
+// ── Load month ─────────────────────────────────────────
+async function loadMonth() {
+  const key = monthKey(curYear, curMonth);
+  setCalLoading(true, 'Loading…');
+  setStatus('Loading…', '');
+
+  try {
+    const binMap = await getBinMap();
+    const binId  = binMap[key];
+
+    if (!binId) {
+      monthData = { month: key, deviations: [] };
+      setStatus('', '');
+    } else {
+      const loaded = await binLoad(binId);
+      monthData = { month: key, deviations: loaded.deviations || [] };
+      if (!globalConfig.length && loaded.config?.length) {
+        globalConfig = loaded.config;
+        LS.saveCfg(globalConfig);
+      }
+      setStatus('Saved \u2713', 'saved');
+    }
+  } catch (e) {
+    if (e.message !== 'Auth') {
+      setStatus('Load error', 'error');
+      monthData = { month: key, deviations: [] };
+    }
+  } finally {
+    setCalLoading(false);
+    renderCalendar();
+  }
+}
+
+// ── Save (debounced 1.8 s) ─────────────────────────────
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  setStatus('Saving…', 'saving');
+  saveTimer = setTimeout(doSave, 1800);
+}
+
+async function doSave() {
+  const key     = monthKey(curYear, curMonth);
+  const payload = { month: key, config: globalConfig, deviations: monthData.deviations || [] };
+  setCalLoading(true, 'Saving…');
+  try {
+    const binMap = binMapCache || LS.getBinMap();
+    let   binId  = binMap[key];
+    if (!binId) {
+      binId = await binCreate(key, payload);
+    } else {
+      await binUpdate(binId, payload);
+    }
+    setStatus('Saved \u2713', 'saved');
+  } catch (e) {
+    if (e.message !== 'Auth') setStatus('Save failed', 'error');
+  } finally {
+    setCalLoading(false);
+  }
+}
+
+// ── Calendar render ────────────────────────────────────
+function renderCalendar() {
+  const n        = daysIn(curYear, curMonth);
+  const startDow = new Date(curYear, curMonth, 1).getDay();
+  let ftDays = 0, customDays = 0, skipDays = 0, total = 0;
+  const cells = [];
+
+  // Day-of-week headers
+  DOW.forEach(d => cells.push(`<div class="cal-dow">${d}</div>`));
+
+  // Empty leading cells
+  for (let i = 0; i < startDow; i++)
+    cells.push(`<div class="cal-cell empty"></div>`);
+
+  // Day cells
+  for (let d = 1; d <= n; d++) {
+    const info    = dayInfo(d);
+    const isToday = (_now.getFullYear() === curYear && _now.getMonth() === curMonth && _now.getDate() === d);
+    const custom  = info.ft && info.price !== info.defPrice;
+
+    let cls = 'cal-cell';
+    if (!info.ft)    { cls += ' ft-none';    skipDays++;                     }
+    else if (custom) { cls += ' ft-custom';  customDays++; total += info.price; }
+    else             { cls += ' ft-default'; ftDays++;     total += info.price; }
+    if (isToday)           cls += ' is-today';
+    if (selectedDays.has(d)) cls += ' selected';
+
+    const bottom = info.ft
+      ? `<div class="day-price">${fmtMoney(info.price)}</div>`
+      : `<div class="no-ft-icon">&#9135;</div>`;
+
+    cells.push(
+      `<div class="${cls}" onclick="onCellClick(${d})" role="button" tabindex="0"
+            onkeydown="if(event.key==='Enter'||event.key===' ')onCellClick(${d})"
+            aria-label="${fmtDate(curYear, curMonth, d)}">
+         <div class="day-num">${d}</div>
+         ${bottom}
+         <div class="select-check">&#10003;</div>
+       </div>`
+    );
+  }
+
+  // Trailing empty cells
+  const trail = (7 - ((startDow + n) % 7)) % 7;
+  for (let i = 0; i < trail; i++)
+    cells.push(`<div class="cal-cell empty"></div>`);
+
+  document.getElementById('calGrid').innerHTML     = cells.join('');
+  document.getElementById('monthDisplay').textContent = `${MN[curMonth]} ${curYear}`;
+  document.getElementById('totalDisplay').textContent = fmtMoney(total);
+  renderSummary(ftDays, customDays, skipDays, total);
+}
+
+function renderSummary(ftDays, customDays, skipDays, total) {
+  document.getElementById('summaryBar').innerHTML = `
+    <div class="sum-item"><span class="badge b-blue">${ftDays}</span>&nbsp;Default FT days</div>
+    <div class="sum-item"><span class="badge b-amber">${customDays}</span>&nbsp;Custom price days</div>
+    <div class="sum-item"><span class="badge b-gray">${skipDays}</span>&nbsp;Skipped</div>
+    <div class="sum-item"><span class="badge b-green">${fmtMoney(total)}</span>&nbsp;Monthly total</div>`;
+}
+
+// ── Month navigation ───────────────────────────────────
+function changeMonth(delta) {
+  if (selectMode) cancelSelectMode();
+  curMonth += delta;
+  if (curMonth > 11) { curMonth = 0; curYear++; }
+  if (curMonth <  0) { curMonth = 11; curYear--; }
+  loadMonth();
+}
+
+// ── Cell click dispatcher ──────────────────────────────
+function onCellClick(day) {
+  if (selectMode) toggleDaySelection(day);
+  else            openDayModal(day);
+}
+
+// ── Bulk selection mode ────────────────────────────────
+function toggleSelectMode() {
+  if (selectMode) { cancelSelectMode(); return; }
+  selectMode = true;
+  selectedDays.clear();
+  const btn = document.getElementById('bulkToggleBtn');
+  btn.classList.add('active');
+  btn.innerHTML = '&#9745; Selecting…';
+  document.getElementById('bulkHint').textContent = 'Tap days to select, then choose an action';
+  updateBulkActions();
+}
+
+function cancelSelectMode() {
+  selectMode = false;
+  selectedDays.clear();
+  const btn = document.getElementById('bulkToggleBtn');
+  btn.classList.remove('active');
+  btn.innerHTML = '&#9744; Select Days';
+  document.getElementById('bulkHint').textContent = 'Select multiple days to bulk update';
+  document.getElementById('bulkActions').classList.remove('visible');
+  renderCalendar();
+}
+
+function toggleDaySelection(day) {
+  if (selectedDays.has(day)) selectedDays.delete(day);
+  else                       selectedDays.add(day);
+
+  const cell = document.querySelector(`.cal-cell[aria-label="${fmtDate(curYear, curMonth, day)}"]`);
+  if (cell) {
+    cell.classList.toggle('selected', selectedDays.has(day));
+    const chk = cell.querySelector('.select-check');
+    if (chk) chk.style.display = selectedDays.has(day) ? 'flex' : 'none';
+  }
+  updateBulkActions();
+}
+
+function updateBulkActions() {
+  const count   = selectedDays.size;
+  const actions = document.getElementById('bulkActions');
+  if (count > 0) {
+    actions.classList.add('visible');
+    document.getElementById('bulkCount').textContent = `${count} day${count !== 1 ? 's' : ''} selected`;
+  } else {
+    actions.classList.remove('visible');
+  }
+}
+
+// ── Bulk: No FT ───────────────────────────────────────
+function bulkApplyNoFt() {
+  for (const day of selectedDays) {
+    setDeviation(day, 'ft', false);
+    const dev = monthData.deviations?.find(d => d.day === day);
+    if (dev) { delete dev.price; delete dev.comment; }
+  }
+  cancelSelectMode();
+  renderCalendar();
+  scheduleSave();
+}
+
+// ── Bulk: Set Price ────────────────────────────────────
+function openBulkPrice() {
+  if (!selectedDays.size) return;
+  const sorted = [...selectedDays].sort((a, b) => a - b);
+  document.getElementById('bulkPriceInfo').textContent =
+    `Applying to ${selectedDays.size} day${selectedDays.size !== 1 ? 's' : ''}: ` +
+    sorted.map(d => fmtDate(curYear, curMonth, d)).join(', ');
+  document.getElementById('bulkPriceIn').value   = '';
+  document.getElementById('bulkCommentIn').value = '';
+  document.getElementById('bulkPriceIn').classList.remove('err');
+  document.getElementById('bulkPriceModal').classList.add('open');
+  setTimeout(() => document.getElementById('bulkPriceIn').focus(), 50);
+}
+
+function closeBulkPrice() {
+  document.getElementById('bulkPriceModal').classList.remove('open');
+}
+
+function applyBulkPrice() {
+  const priceIn = document.getElementById('bulkPriceIn');
+  const price   = +priceIn.value;
+  const comment = document.getElementById('bulkCommentIn').value.trim();
+  if (priceIn.value === '' || isNaN(price)) {
+    priceIn.classList.add('err');
+    return;
+  }
+  priceIn.classList.remove('err');
+  for (const day of selectedDays) {
+    setDeviation(day, 'ft',      true);
+    setDeviation(day, 'price',   price);
+    setDeviation(day, 'comment', comment);
+  }
+  closeBulkPrice();
+  cancelSelectMode();
+  renderCalendar();
+  scheduleSave();
+}
+
+// ── Day Modal ──────────────────────────────────────────
+function openDayModal(day) {
+  editDay = day;
+  const info = dayInfo(day);
+  const dow  = DOW[new Date(curYear, curMonth, day).getDay()];
+
+  document.getElementById('dayModalTitle').textContent = fmtDate(curYear, curMonth, day);
+  document.getElementById('dayModalSub').textContent   = dow;
+  document.getElementById('ftToggle').checked          = info.ft;
+  document.getElementById('toggleText').textContent    = info.ft ? 'FT Requested' : 'No FT';
+
+  const priceIn   = document.getElementById('dayPrice');
+  const commentIn = document.getElementById('dayComment');
+  priceIn.value    = info.price;
+  priceIn.disabled = !info.ft;
+  priceIn.classList.toggle('deviated', info.ft && info.price !== info.defPrice);
+  commentIn.value    = info.comment;
+  commentIn.disabled = !info.ft;
+
+  document.getElementById('priceHint').textContent =
+    info.price !== info.defPrice
+      ? `Default for this day: ${fmtMoney(info.defPrice)}`
+      : `Default: ${fmtMoney(info.defPrice)}`;
+
+  document.getElementById('dayModalSaveBtn').disabled = false;
+  document.getElementById('dayModal').classList.add('open');
+  setTimeout(() => { if (info.ft) priceIn.focus(); }, 50);
+}
+
+function closeDayModal() {
+  document.getElementById('dayModal').classList.remove('open');
+  editDay = null;
+}
+
+function onFtToggle() {
+  const on        = document.getElementById('ftToggle').checked;
+  const priceIn   = document.getElementById('dayPrice');
+  const commentIn = document.getElementById('dayComment');
+  document.getElementById('toggleText').textContent = on ? 'FT Requested' : 'No FT';
+  priceIn.disabled   = !on;
+  commentIn.disabled = !on;
+  if (on) {
+    const def = defaultPriceFor(curYear, curMonth, editDay);
+    priceIn.value = def;
+    priceIn.classList.remove('deviated');
+    document.getElementById('priceHint').textContent = `Default: ${fmtMoney(def)}`;
+  }
+}
+
+function onPriceInput() {
+  const priceIn = document.getElementById('dayPrice');
+  const def     = defaultPriceFor(curYear, curMonth, editDay);
+  const changed = Number(priceIn.value) !== def;
+  priceIn.classList.toggle('deviated', changed);
+  document.getElementById('priceHint').textContent = changed
+    ? `Default for this day: ${fmtMoney(def)}`
+    : `Default: ${fmtMoney(def)}`;
+}
+
+function saveDayModal() {
+  const day     = editDay;
+  const ft      = document.getElementById('ftToggle').checked;
+  const price   = +document.getElementById('dayPrice').value;
+  const comment = document.getElementById('dayComment').value.trim();
+
+  setDeviation(day, 'ft', ft);
+  if (ft) {
+    setDeviation(day, 'price',   price);
+    setDeviation(day, 'comment', comment);
+  } else {
+    const dev = monthData.deviations?.find(d => d.day === day);
+    if (dev) { delete dev.price; delete dev.comment; }
+  }
+
+  closeDayModal();
+  renderCalendar();
+  scheduleSave();
+}
+
+// ── Config Modal ───────────────────────────────────────
+function openCfg() {
+  renderCfgTable();
+  document.getElementById('cfgAccessKey').value = LS.getAccessKey();
+  document.getElementById('cfgMasterKey').value = LS.getMasterKey();
+  document.getElementById('cfgCollId').value    = LS.getCollId();
+  document.getElementById('cfgModal').classList.add('open');
+}
+
+function closeCfg() {
+  document.getElementById('cfgModal').classList.remove('open');
+  renderCalendar();
+}
+
+function renderCfgTable() {
+  const sorted = [...globalConfig].sort((a, b) => a.day - b.day);
+  if (!sorted.length) {
+    document.getElementById('cfgBody').innerHTML =
+      '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px">No entries. Add one below.</td></tr>';
+    return;
+  }
+  document.getElementById('cfgBody').innerHTML = sorted.map((c, i) => `
+    <tr>
+      <td style="text-align:center;">
+        <input type="date" class="cfg-day-in"
+               value="${curYear}-01-${String(c.day).padStart(2,'0')}"
+               onchange="onCfgDayChange(${i}, +this.value.split('-')[2])">
+      </td>
+      <td>
+        <input type="number" class="cfg-price-in" value="${c.price}" min="0" step="1"
+               onchange="onCfgPriceChange(${i}, +this.value)">
+      </td>
+      <td>
+        <button class="btn-sm btn-danger" onclick="removeCfgRow(${i})"
+                title="Remove" ${sorted.length <= 1 ? 'disabled' : ''}>&#128465;</button>
+      </td>
+    </tr>`).join('');
+}
+
+function addCfgRow() {
+  const sorted  = [...globalConfig].sort((a, b) => a.day - b.day);
+  const nextDay = sorted.length ? Math.min(sorted[sorted.length - 1].day + 1, 31) : 1;
+  globalConfig.push({ day: nextDay, price: 0 });
+  LS.saveCfg(globalConfig);
+  renderCfgTable();
+  scheduleSave();
+}
+
+function removeCfgRow(idx) {
+  const sorted = [...globalConfig].sort((a, b) => a.day - b.day);
+  sorted.splice(idx, 1);
+  globalConfig = sorted;
+  LS.saveCfg(globalConfig);
+  renderCfgTable();
+  renderCalendar();
+  scheduleSave();
+}
+
+function onCfgDayChange(idx, value) {
+  const day    = Math.max(1, Math.min(31, value || 1));
+  const sorted = [...globalConfig].sort((a, b) => a.day - b.day);
+  sorted[idx].day = day;
+  globalConfig    = sorted;
+  LS.saveCfg(globalConfig);
+  renderCfgTable();
+  renderCalendar();
+  scheduleSave();
+}
+
+function onCfgPriceChange(idx, value) {
+  const sorted = [...globalConfig].sort((a, b) => a.day - b.day);
+  sorted[idx].price = value;
+  globalConfig      = sorted;
+  LS.saveCfg(globalConfig);
+  renderCalendar();
+  scheduleSave();
+}
+
+function saveCfgAll() {
+  LS.saveCfg(globalConfig);
+  const ak = document.getElementById('cfgAccessKey').value.trim();
+  const mk = document.getElementById('cfgMasterKey').value.trim();
+  const ci = document.getElementById('cfgCollId').value.trim();
+  if (ak) LS.setAccessKey(ak);
+  if (mk) LS.setMasterKey(mk);
+  if (ci) {
+    const changed = ci !== LS.getCollId();
+    LS.setCollId(ci);
+    if (changed) binMapCache = null;
+  }
+  closeCfg();
+  scheduleSave();
+}
+
+function saveKeysFromCfg() { saveCfgAll(); }
+
+// ── Setup Modal ────────────────────────────────────────
+function showSetupModal() {
+  document.getElementById('setupModal').classList.add('open');
+}
+
+function clearSetupErr(id) {
+  document.getElementById(id).classList.remove('err');
+  document.getElementById('err-' + id).classList.remove('visible');
+}
+
+function saveSetup() {
+  const ak = document.getElementById('setupAccessKey').value.trim();
+  const mk = document.getElementById('setupMasterKey').value.trim();
+  const ci = document.getElementById('setupCollId').value.trim();
+  let ok = true;
+  if (!ak) { document.getElementById('setupAccessKey').classList.add('err'); document.getElementById('err-setupAccessKey').classList.add('visible'); ok = false; }
+  if (!mk) { document.getElementById('setupMasterKey').classList.add('err'); document.getElementById('err-setupMasterKey').classList.add('visible'); ok = false; }
+  if (!ci) { document.getElementById('setupCollId').classList.add('err');    document.getElementById('err-setupCollId').classList.add('visible');    ok = false; }
+  if (!ok) return;
+
+  LS.setAccessKey(ak);
+  LS.setMasterKey(mk);
+  LS.setCollId(ci);
+  binMapCache = null; // fresh cache for new credentials
+  document.getElementById('setupModal').classList.remove('open');
+  loadMonth();
+}
+
+// Close modals on overlay background click
+['dayModal', 'cfgModal', 'bulkPriceModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target !== this) return;
+    if (id === 'dayModal')       closeDayModal();
+    if (id === 'cfgModal')       closeCfg();
+    if (id === 'bulkPriceModal') closeBulkPrice();
+  });
+});
+
+// ── Init ──────────────────────────────────────────────
+(function init() {
+  globalConfig = LS.getCfg();
+  if (!globalConfig.length) {
+    globalConfig = [{ day: 1, price: 0 }];
+    LS.saveCfg(globalConfig);
+  }
+  if (!isSetupComplete()) {
+    showSetupModal();
+    renderCalendar(); // render empty calendar behind setup modal
+  } else {
+    document.getElementById('setupModal').classList.remove('open');
+    loadMonth();
+  }
+}());
+</script>
+
+</body>
+</html>
